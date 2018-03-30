@@ -283,13 +283,18 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR, int)
 			wcout << L"	Arrows for movement" << endl;
 			wcout << L"	A,D = Less/More iterations" << endl;
 			wcout << L"	Shift + any of the above makes them faster" << endl;
-			wcout << L"	Press T to toggle double precision (AVX always runs at double precision)" << endl;
+			wcout << L"	Press T to toggle double precision (CPU always runs at double precision)" << endl;
+			wcout << L"	Press R to switch between CPU and GPU" << endl;
 			wcout << L"-------------------------------" << endl;
 			wcout << L"Zoom : " << CurrentZoom << endl;
 			wcout << L"X : " << CurrentPosX << endl;
 			wcout << L"Y : " << CurrentPosY << endl;
 			wcout << L"n : " << CurrentInterations << endl;
-			wcout << ((UseDouble) ? L"Using Double Precision" : L"Using Single Precision") << endl;
+
+			if (UseCPU)
+				wcout << L"CPU, Using Double Precision" << endl;
+			else
+				wcout << ((UseDouble) ? L"GPU, Using Double Precision" : L"GPU, Using Single Precision") << endl;
 
 			FrameDX::Log.PrintAll(wcout);
 		}, 150ms);
@@ -319,6 +324,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR, int)
 	{
 		if (key == 'T' && action == FrameDX::KeyAction::Up)
 			UseDouble = !UseDouble;
+		if (key == 'R' && action == FrameDX::KeyAction::Up)
+			UseCPU = !UseCPU;
 	};
 
 	// Create device
@@ -423,73 +430,71 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrevInst, LPSTR, int)
 
 	dev.EnterMainLoop([&](double GlobalTimeNanoseconds)
 	{
-		// Update cbuffer
-		// TODO : move this to a wrapper function to make it cleaner
-
-		double CoeffA_X = (4.0*CurrentZoom) * InvResX;
-		double CoeffA_Y = (4.0*CurrentZoom) * InvResY;
-		double CoeffB_X = -2.0*CurrentZoom + CurrentPosX;
-		double CoeffB_Y = -2.0*CurrentZoom + CurrentPosY;
-
-		if(UseDouble)
+		if (UseCPU)
 		{
-			D3D11_MAPPED_SUBRESOURCE mappedResource;
-			ZeroMemory(&mappedResource, sizeof(D3D11_MAPPED_SUBRESOURCE));
-			dev.GetImmediateContext()->Map(cb_buffer_double, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
-
-			CSConstantBuffer_Double new_data;
-			new_data.CoeffA_X = CoeffA_X;
-			new_data.CoeffA_Y = CoeffA_Y;
-			new_data.CoeffB_X = CoeffB_X;
-			new_data.CoeffB_Y = CoeffB_Y;
-			new_data.Iterations = CurrentInterations;
-
-			memcpy(mappedResource.pData, &new_data, sizeof(CSConstantBuffer_Double));
-			dev.GetImmediateContext()->Unmap(cb_buffer_double, 0);
-		}
-		else
-		{
-			D3D11_MAPPED_SUBRESOURCE mappedResource;
-			ZeroMemory(&mappedResource, sizeof(D3D11_MAPPED_SUBRESOURCE));
-			dev.GetImmediateContext()->Map(cb_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
-
-			CSConstantBuffer new_data;
-			new_data.CoeffA_X = CoeffA_X;
-			new_data.CoeffA_Y = CoeffA_Y;
-			new_data.CoeffB_X = CoeffB_X;
-			new_data.CoeffB_Y = CoeffB_Y;
-			new_data.Iterations = CurrentInterations;
-
-			memcpy(mappedResource.pData, &new_data, sizeof(CSConstantBuffer));
-			dev.GetImmediateContext()->Unmap(cb_buffer, 0);
-		}
-
-		// Run compute shader
-		// No need to clean as this writes to the whole screen
-		if(UseDouble)
-			dev.BindPipelineState(cs_state_double);
-		else
-			dev.BindPipelineState(cs_state);
-		dev.GetImmediateContext()->Dispatch(FrameDX::ceil(2*dev.GetBackbuffer()->Desc.SizeX,mandelbrot_cs.GroupSizeX), FrameDX::ceil(2*dev.GetBackbuffer()->Desc.SizeY, mandelbrot_cs.GroupSizeY), 1);
-
-
-
-
-		// DEBUG
-		{
+			// Compute mandelbrot writing directly to the mapped buffer
 			D3D11_MAPPED_SUBRESOURCE mappedResource;
 			ZeroMemory(&mappedResource, sizeof(D3D11_MAPPED_SUBRESOURCE));
 			dev.GetImmediateContext()->Map(cpu_texture.GetResource(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
 
-			CPUMandelbrot((uint8_t*)mappedResource.pData);
+				CPUMandelbrot((uint8_t*)mappedResource.pData);
 
 			dev.GetImmediateContext()->Unmap(cpu_texture.GetResource(), 0);
+
+			// Copy the texture to the backbuffer
+			dev.GetBackbuffer()->CopyFrom(&cpu_texture);
 		}
-		dev.GetBackbuffer()->CopyFrom(&cpu_texture);
+		else
+		{
+			// Update cbuffer
+			// TODO : move this to a wrapper function to make it cleaner
 
+			double CoeffA_X = (4.0*CurrentZoom) * InvResX;
+			double CoeffA_Y = (4.0*CurrentZoom) * InvResY;
+			double CoeffB_X = -2.0*CurrentZoom + CurrentPosX;
+			double CoeffB_Y = -2.0*CurrentZoom + CurrentPosY;
 
+			if (UseDouble)
+			{
+				D3D11_MAPPED_SUBRESOURCE mappedResource;
+				ZeroMemory(&mappedResource, sizeof(D3D11_MAPPED_SUBRESOURCE));
+				dev.GetImmediateContext()->Map(cb_buffer_double, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
 
+				CSConstantBuffer_Double new_data;
+				new_data.CoeffA_X = CoeffA_X;
+				new_data.CoeffA_Y = CoeffA_Y;
+				new_data.CoeffB_X = CoeffB_X;
+				new_data.CoeffB_Y = CoeffB_Y;
+				new_data.Iterations = CurrentInterations;
 
+				memcpy(mappedResource.pData, &new_data, sizeof(CSConstantBuffer_Double));
+				dev.GetImmediateContext()->Unmap(cb_buffer_double, 0);
+			}
+			else
+			{
+				D3D11_MAPPED_SUBRESOURCE mappedResource;
+				ZeroMemory(&mappedResource, sizeof(D3D11_MAPPED_SUBRESOURCE));
+				dev.GetImmediateContext()->Map(cb_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedResource);
+
+				CSConstantBuffer new_data;
+				new_data.CoeffA_X = CoeffA_X;
+				new_data.CoeffA_Y = CoeffA_Y;
+				new_data.CoeffB_X = CoeffB_X;
+				new_data.CoeffB_Y = CoeffB_Y;
+				new_data.Iterations = CurrentInterations;
+
+				memcpy(mappedResource.pData, &new_data, sizeof(CSConstantBuffer));
+				dev.GetImmediateContext()->Unmap(cb_buffer, 0);
+			}
+
+			// Run compute shader
+			// No need to clean as this writes to the whole screen
+			if (UseDouble)
+				dev.BindPipelineState(cs_state_double);
+			else
+				dev.BindPipelineState(cs_state);
+			dev.GetImmediateContext()->Dispatch(FrameDX::ceil(2 * dev.GetBackbuffer()->Desc.SizeX, mandelbrot_cs.GroupSizeX), FrameDX::ceil(2 * dev.GetBackbuffer()->Desc.SizeY, mandelbrot_cs.GroupSizeY), 1);
+		}
 
 		dev.GetSwapChain()->Present(0, 0);
 	});
