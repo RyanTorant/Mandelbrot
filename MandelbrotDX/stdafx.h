@@ -3,11 +3,9 @@
 #include "FrameDX/stdafx.h"
 #include "FrameDX/Device/Device.h"
 #include "FrameDX/Core/Log.h"
-#include <io.h>
-#include <corecrt_io.h>
 #include <thread>
 #include <chrono>
-#include <conio.h>
 #include "FrameDX/Shader/Shaders.h"
 #include "FrameDX/Core/Utils.h"
 #include "FrameDX/Mesh/Mesh.h"
+#include <xmmintrin.h>

@@ -3,22 +3,31 @@ Texture2D<float4> ColorTable : register(t0);
 SamplerState PointSampler;
 
 #if USE_DOUBLES
-cbuffer CSConstantBuffer : register(b0)
+cbuffer CSConstantBuffer_Double : register(b0)
 {
-    double2 PosOffset;
+    double2 CoeffA;
+    double2 CoeffB;
 
-    double Zoom;
     uint Iterations;
-    uint padding;
+    uint padding0;
+    uint padding1;
+    uint padding2;
 };
 #else
 cbuffer CSConstantBuffer : register(b0)
 {
-    float2 PosOffset;
-    float Zoom;
+    float2 CoeffA;
+    float2 CoeffB;
+
     uint Iterations;
+    uint padding0;
+    uint padding1;
+    uint padding2;
 };
 #endif
+
+#define SCREEN_RES_X 1024
+#define SCREEN_RES_Y 1024
 
 #define GROUP_DIM 16
 groupshared float4 GroupBuffer[GROUP_DIM][GROUP_DIM];
@@ -36,15 +45,10 @@ void main(uint3 DTid : SV_DispatchThreadID, uint3 GTid : SV_GroupThreadID)
     DTid.xy /= 2;
 
 #if USE_DOUBLES
-    double2 c = double2(DTid.xy + 0.5*mask) / double2(1024, 1024);
+    double2 c = CoeffA * double2(DTid.xy + 0.5*mask) + CoeffB;
 #else
-    float2 c = float2(DTid.xy + 0.5 * mask) / float2(1024, 1024);
+    float2 c = CoeffA * float2(DTid.xy + 0.5 * mask) + CoeffB;
 #endif
-
-    c = 2.0f * (c * 2 - 1);
-
-    c *= Zoom;
-    c += PosOffset;
 
     float iters = -1;
 
