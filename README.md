@@ -1,7 +1,7 @@
 # Mandelbrot
-A Mandelbrot renderer using my DX11 framework (https://github.com/RyanTorant/FrameDX), with both GPU and CPU implementations
-It features x2 AA, either by using groupshared memory on the GPU implementation, or AVX for the CPU implementation.
-The GPU implementation can use either single or double precision, the CPU one runs always at double precision
+A Mandelbrot renderer using my DX11 framework (https://github.com/RyanTorant/FrameDX), with both GPU and CPU implementations.   
+It features x2 AA, either by using groupshared memory on the GPU implementation, or AVX for the CPU implementation.  
+The GPU implementation can use either single or double precision, the CPU one runs always at double precision. 
 
 ## Results on my system
 Running on a Xeon E5-2683v3 and a GTX 980 Ti I'm getting the following FPS, for the starting configuration 
